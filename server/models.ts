@@ -119,13 +119,34 @@ export const MenuItem = models.MenuItem ?? model("MenuItem", MenuItemSchema);
 export const EventDoc = models.Event ?? model("Event", EventSchema);
 export const Reservation = models.Reservation ?? model("Reservation", ReservationSchema);
 
-let connecting: Promise<typeof mongoose> | null = null;
+/**
+ * Connection cache.
+ *
+ * Held on globalThis, not in a module variable, because on serverless the
+ * module can be re-evaluated between invocations while the process survives.
+ * Without this, every request opens a new connection and the Atlas pool is
+ * exhausted within minutes.
+ */
+const cache = globalThis as typeof globalThis & {
+  __palacioMongoose?: Promise<typeof mongoose> | null;
+};
 
 export async function connectDb(uri = process.env.MONGODB_URI) {
   if (!uri) throw new Error("MONGODB_URI is not set");
   if (mongoose.connection.readyState === 1) return mongoose;
-  if (!connecting) {
-    connecting = mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+  if (!cache.__palacioMongoose) {
+    cache.__palacioMongoose = mongoose
+      .connect(uri, {
+        serverSelectionTimeoutMS: 8000,
+        // One connection per warm instance is plenty and keeps well inside
+        // Atlas's free-tier cap when several instances are warm at once.
+        maxPoolSize: 5,
+      })
+      .catch((err) => {
+        // Don't cache a failed attempt, or every later request inherits it.
+        cache.__palacioMongoose = null;
+        throw err;
+      });
   }
-  return connecting;
+  return cache.__palacioMongoose;
 }

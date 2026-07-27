@@ -447,11 +447,29 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Server error" });
 });
 
-connectDb()
-  .then(() => {
-    app.listen(PORT, () => console.log(`[api] listening on :${PORT}`));
-  })
-  .catch((e) => {
-    console.error("[api] could not reach MongoDB:", e.message);
-    process.exit(1);
-  });
+/**
+ * Serverless hosts import this app; they must not have a listener bound.
+ * Connect lazily per request instead, since there is no boot phase to hook.
+ */
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDb();
+    next();
+  } catch (e) {
+    next(e as Error);
+  }
+});
+
+export default app;
+
+// Only bind a port when this file is the entry point (local `npm run api`).
+const isDirect =
+  process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
+if (isDirect || process.env.FORCE_LISTEN === "1") {
+  connectDb()
+    .then(() => app.listen(PORT, () => console.log(`[api] listening on :${PORT}`)))
+    .catch((e) => {
+      console.error("[api] could not reach MongoDB:", e.message);
+      process.exit(1);
+    });
+}
