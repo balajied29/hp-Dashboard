@@ -9,7 +9,17 @@
  * login screen, so an expired session never leaves the UI in a broken state.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/**
+ * Empty = same origin.
+ *
+ * The API is mounted at /api of this very app, so a relative URL is both
+ * correct and CORS-free. Pointing this at an absolute domain means guessing
+ * the deployment URL, which is how this first shipped broken: the guess
+ * (hp-dashboard.vercel.app) 404s, while the real alias is
+ * hp-dashboard-kappa.vercel.app. Only set the env var if the API is genuinely
+ * hosted elsewhere.
+ */
+const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const KEY = "palacio_token";
 
 export const getToken = () =>
