@@ -13,7 +13,7 @@ import {
   RESERVATION_STATUSES,
   VENUE_IDS,
   type VenueId,
-} from "./models.js";
+} from "./models";
 
 /**
  * Hotel Palacio API.
@@ -46,6 +46,24 @@ cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+/**
+ * Connect before anything queries.
+ *
+ * Must be registered above the routes: Express runs middleware in
+ * registration order, and sitting below them meant every request reached
+ * Mongoose with no connection and buffered until it timed out. Serverless has
+ * no boot phase to connect in, so it happens per request against a cached
+ * connection.
+ */
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDb();
+    next();
+  } catch (e) {
+    next(e as Error);
+  }
 });
 
 // ---------- auth ----------
@@ -445,19 +463,6 @@ app.get("/api/health", (_req, res) =>
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("[api]", err.message);
   res.status(500).json({ error: "Server error" });
-});
-
-/**
- * Serverless hosts import this app; they must not have a listener bound.
- * Connect lazily per request instead, since there is no boot phase to hook.
- */
-app.use(async (_req, _res, next) => {
-  try {
-    await connectDb();
-    next();
-  } catch (e) {
-    next(e as Error);
-  }
 });
 
 export default app;
